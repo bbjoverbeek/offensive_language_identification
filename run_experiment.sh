@@ -67,6 +67,10 @@ case $1 in
     ;;
 esac
 
+# --- Copy the evaluation and prediction scripts ---
+cp $CODE_FOLDER"evaluate.py" $EXPERIMENT_FOLDER"evaluate.py"
+cp $CODE_FOLDER"predict.py" $EXPERIMENT_FOLDER"predict.py"
+
 # --- Activate virtual environment ---
 source $ENV_FOLDER"bin/activate"
 
@@ -77,24 +81,24 @@ python3 $EXPERIMENT_FOLDER"train.py" \
 
 # predict and evaluate on dev or test set based on TEST_SET variable
 if [ $TEST_SET = false ]; then
-    python3 $CODE_FOLDER"predict.py" \
+    python3 $EXPERIMENT_FOLDER"predict.py" \
             --model $EXPERIMENT_FOLDER"model.bin" \
             --test-data $DATA_FOLDER"dev.tsv" \
             --predictions-outp $EXPERIMENT_FOLDER"dev_predictions.txt"
 
-    python3 $CODE_FOLDER"evaluate.py" \
+    python3 $EXPERIMENT_FOLDER"evaluate.py" \
             --gold-labels $DATA_FOLDER"dev.tsv" \
             --predictions $EXPERIMENT_FOLDER"dev_predictions.txt" \
             --evaluation-outp $EXPERIMENT_FOLDER"evaluation.txt" \
             --evaluation-overview $RESULTS_FOLDER"$1".md
 
 else
-    python3 $CODE_FOLDER"predict.py" \
+    python3 $EXPERIMENT_FOLDER"predict.py" \
         --model $EXPERIMENT_FOLDER"model.bin" \
         --test-data $DATA_FOLDER"test.tsv" \
         --predictions-outp $EXPERIMENT_FOLDER"test_predictions.txt"
 
-    python3 $CODE_FOLDER"evaluate.py" \
+    python3 $EXPERIMENT_FOLDER"evaluate.py" \
         --gold-labels $DATA_FOLDER"test.tsv" \
         --predictions $EXPERIMENT_FOLDER"test_predictions.txt" \
         --evaluation-outp $EXPERIMENT_FOLDER"evaluation.txt" \
