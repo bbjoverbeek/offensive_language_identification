@@ -73,7 +73,7 @@ source $ENV_FOLDER"bin/activate"
 # --- Train the model ---
 python3 $EXPERIMENT_FOLDER"train.py" \
         --train-data $DATA_FOLDER"train.tsv" \
-        --model-outp $EXPERIMENT_FOLDER"model.bin"
+        --model-outp $EXPERIMENT_FOLDER"model.bin" > $EXPERIMENT_FOLDER"training_log.txt"
 
 # predict and evaluate on dev or test set based on TEST_SET variable
 if [ $TEST_SET = false ]; then
