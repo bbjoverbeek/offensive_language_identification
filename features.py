@@ -7,6 +7,7 @@ predict if a piece of text has offensive language or not.
 """
 
 import itertools
+import pickle
 from typing import NamedTuple
 from enum import Enum
 import os
@@ -20,7 +21,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC, LinearSVC
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.pipeline import Pipeline, FeatureUnion
-
+from src.util import get_data
 import spacy
 from pytablewriter import MarkdownTableWriter
 
@@ -29,32 +30,6 @@ LABELS = ["OFF", "NOT"]
 
 
 # Function to open the data and to run the program with certain arguments
-
-def open_data(filename: str) -> tuple[list[str], list[str]]:
-    """
-    Will open the data and return it as a tuple of lists. The first list contains the documents
-    and the second list contains the labels.
-    """
-
-    with open(filename, 'r') as f:
-        documents = []
-        labels = []
-        for line in f:
-            line = line.strip().split("\t")
-            documents.append(line[0])
-            labels.append(line[1])
-
-    return documents, labels
-
-
-def get_data(dirname: str) -> list[tuple[list[str], list[str]]]:
-    dirname = os.path.join(os.getcwd(), dirname)
-    filenames = ["dev.tsv", "test.tsv", "train.tsv"]
-    data = []
-    for index, filename in enumerate(filenames):
-        filename = os.path.join(dirname, filename)
-        data.append(open_data(filename))
-    return data
 
 
 def create_arg_parser() -> argparse.ArgumentParser:
@@ -276,6 +251,12 @@ def create_classifier_algorithm(algorithm: Algorithm):
 
     match algorithm:
         case Algorithm.NAIVE_BAYES:
+            # cls = MultinomialNB(alpha=5, fit_prior=True)
+            # used by "Zeyad at SemEval-2019 Task 6: That’s Offensive! An All-Out Search For An
+            # Ensemble To Identify And Categorize Offense in Tweets"
+
+            # Emad at SemEval-2019 Task 6: Offensive Language Identification using Traditional
+            # Machine Learning and Deep Learning approaches
             return MultinomialNB()
         case Algorithm.DECISION_TREES:
             return DecisionTreeClassifier()
@@ -284,6 +265,9 @@ def create_classifier_algorithm(algorithm: Algorithm):
         case Algorithm.KNN:
             return KNeighborsClassifier()
         case Algorithm.SVC:
+            # SINAI at SemEval-2019 Task 6: Incorporating lexicon knowledge into SVM learning to
+            # identify and categorize offensive language in social media
+            # has SVC with C = 1.0, which is standard
             return SVC()
         case Algorithm.LINEAR_SVC:
             return LinearSVC(dual=False)
@@ -340,6 +324,14 @@ class Scores(NamedTuple):
         return output
 
 
+def create_model_name(options: Options) -> str:
+    """
+    Create a name for the model based on the options.
+    """
+    return f"{options.algorithm.value}__{options.vectorizer.value}__{options.ngram.value}-gram__" \
+        + f"{options.pos.value}__{options.preprocessing.value}"
+
+
 def calculate_scores(
         options: Options, predictions: list[str], labels: list[str], precision: int
 ) -> Scores:
@@ -347,11 +339,8 @@ def calculate_scores(
     Calculate the scores of the classifier and return them as a dict.
     """
 
-    name = f"{options.algorithm.value}__{options.vectorizer.value}__{options.ngram.value}-gram__" \
-           + f"{options.pos.value}__{options.preprocessing.value}"
-
     return Scores(
-        name=name,
+        name=create_model_name(options),
         accuracy=round(sklearn.metrics.accuracy_score(labels, predictions), precision),
         precision=round(
             sklearn.metrics.precision_score(labels, predictions, average="macro"), precision
@@ -377,6 +366,15 @@ def run_models(
         predictions = model.predict(docs)
         scores = calculate_scores(options, predictions, labels, precision)
         print(scores)
+
+
+def save_model(model: Pipeline, options: Options) -> None:
+    """
+    Save the model to a file.
+    """
+    filename = f"models/{create_model_name(options)}.model.pkl"
+    with open(filename, "wb") as f:
+        pickle.dump(model, f)
 
 
 def create_all_options() -> list[Options]:
@@ -405,13 +403,14 @@ def main():
     args = create_arg_parser().parse_args()
 
     data = get_data(args.dirname)
-    ((dev_docs, dev_labels), (test_docs, test_labels), (train_docs, train_labels)) = data
 
     # These docs and labels are used for testing. You can use the dev data or the test data.
-    (docs, labels) = (test_docs, test_labels) if args.test else (dev_docs, dev_labels)
+    (docs, labels) = (data.test.documents, data.test.labels) if args.test else (
+        data.development.documents, data.development.labels
+    )
 
     (train_docs, train_labels, docs, labels) = (
-        train_docs[:64], train_labels[:64], docs[:64], labels[:64]
+        data.training.documents[:64], data.training.labels[:64], docs[:64], labels[:64]
     )
 
     train_docs = add_additional_information(train_docs)
