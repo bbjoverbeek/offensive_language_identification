@@ -13,6 +13,6 @@ def load_data(file_path: str) -> tuple[list[str], list[str]]:
             if line:
                 tweet, label = line.split('\t')
                 tweets.append(tweet)
-                labels.append(label)
+                labels.append(int(label))
 
     return tweets, labels
