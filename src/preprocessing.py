@@ -7,7 +7,9 @@ ws = WordSegmenter(
     segmenter_model_name_or_path="gpt2",
     segmenter_model_type="incremental",
     reranker_model_name_or_path="google/flan-t5-base",
-    reranker_model_type="seq2seq"
+    reranker_model_type="seq2seq",
+    segmenter_device="cpu",
+    reranker_device="cpu",
 )
 
 
@@ -17,7 +19,7 @@ def emoji_to_text(text: str) -> str:
     :param text: the text to convert
     :return: the converted text
     """
-    return emoji.demojize(text, delimiters=("", ""))
+    return emoji.demojize(text, delimiters=(":", " "))
 
 
 def url_to_http(text: str) -> str:
@@ -36,13 +38,14 @@ def hashtag_segmentation(text: str) -> str:
     :param text: a piece of text, most of the time a tweet
     :return: the text with segmented hashtags
     """
-    hashtags = re.findall(r"#(\w+)", text)
-    texts = ws.segment(hashtags)
-    for (item, hashtag) in zip(texts, hashtags):
-        re.sub(r'#' + hashtag, item, text)
+    hashtags = re.findall(r"#\w+", text)
+    print(hashtags)
+    if hashtags:
+        texts = ws.segment(hashtags)
+        print(texts)
+        for (item, hashtag) in zip(texts, hashtags):
+            text = text.replace(hashtag, item)
     return text
-
-
 
 
 def offensive_word_replacement(
@@ -50,11 +53,18 @@ def offensive_word_replacement(
         offensive_words_pattern: re.Pattern,
         option: OffensiveWordReplaceOption
 ) -> str:
-    return text
+    match option:
+        case OffensiveWordReplaceOption.NONE:
+            return text
+        case OffensiveWordReplaceOption.REPLACE:
+            return offensive_words_pattern.sub(" OFFENSIVE ", text)
+        case OffensiveWordReplaceOption.REMOVE:
+            return offensive_words_pattern.sub(" ", text)
 
 
 def create_offensive_words_pattern(offensive_words: set[str]) -> re.Pattern:
-    return re.compile(r"\b(" + "|".join(offensive_words) + r")\b", re.IGNORECASE)
+    pattern = re.compile(f" ({'|'.join(map(re.escape, offensive_words))}) ")
+    return pattern
 
 
 def preprocess(
@@ -75,17 +85,14 @@ def preprocess(
 
 
 def main():
-    offensive_words = load_offensive_words("../data/offensive_words.txt")
+    offensive_words = load_offensive_words("../data/bad-words.txt")
     pattern = create_offensive_words_pattern(offensive_words)
     data = load_data("../data", OffensiveWordReplaceOption.NONE)
 
-    tweet = data.training.documents[0]
+    tweet = data.training.documents[1]
     print(tweet)
-    preprocessed = preprocess(tweet, pattern, OffensiveWordReplaceOption.NONE)
+    preprocessed = preprocess(tweet, pattern, OffensiveWordReplaceOption.REPLACE)
     print(preprocessed)
-
-
-
 
 
 if __name__ == "__main__":

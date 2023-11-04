@@ -35,20 +35,24 @@ def load_offensive_words(file_path: str) -> set[str]:
     with open(file_path, 'r', encoding='utf-8') as inp:
         for line in inp:
             line = line.strip()
-            offensive_words.add(line)
+            if line:
+                offensive_words.add(line)
 
     return offensive_words
 
 
 def create_filename(
-        dirname: str, data_type: DataType, replace_option: OffensiveWordReplaceOption
+        dirname: str,
+        data_type: DataType,
+        replace_option: OffensiveWordReplaceOption,
+        preprocessed: bool = False
 ) -> str:
     """Creates a filename for the given data type and replace option"""
 
     filename = data_type.value
     filename += "." + replace_option.value \
         if replace_option != OffensiveWordReplaceOption.NONE else ""
-    filename += ".preprocessed"
+    filename += ".preprocessed" if preprocessed else ""
     filename += ".tsv"
     filename = os.path.join(os.getcwd(), dirname, filename)
     return filename
