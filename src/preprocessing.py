@@ -1,7 +1,9 @@
 import emoji
 import re
 from hashformers import TransformerWordSegmenter as WordSegmenter
-from util import load_offensive_words, load_data, OffensiveWordReplaceOption
+from util import (
+    load_offensive_words, load_data, OffensiveWordReplaceOption, write_data, DataType
+)
 
 ws = WordSegmenter(
     segmenter_model_name_or_path="gpt2",
@@ -67,7 +69,7 @@ def create_offensive_words_pattern(offensive_words: set[str]) -> re.Pattern:
     return pattern
 
 
-def preprocess(
+def preprocess_tweet(
         text: str,
         offensive_words_pattern: re.Pattern,
         option: OffensiveWordReplaceOption
@@ -89,10 +91,22 @@ def main():
     pattern = create_offensive_words_pattern(offensive_words)
     data = load_data("../data", OffensiveWordReplaceOption.NONE)
 
-    tweet = data.training.documents[1]
-    print(tweet)
-    preprocessed = preprocess(tweet, pattern, OffensiveWordReplaceOption.REPLACE)
-    print(preprocessed)
+    for index, tweet in enumerate(data.development.documents[:20]):
+        data.development.documents[index] = preprocess_tweet(
+            tweet, pattern, OffensiveWordReplaceOption.REPLACE
+        )
+
+    write_data(data, "../data", OffensiveWordReplaceOption.REPLACE)
+
+    # for index, tweet in enumerate(data.training.documents):
+    #     data.training.documents[index] = preprocess_tweet(
+    #         tweet, pattern, OffensiveWordReplaceOption.REPLACE
+    #     )
+    #
+    # for index, tweet in enumerate(data.training.documents):
+    #     data.training.documents[index] = preprocess_tweet(
+    #         tweet, pattern, OffensiveWordReplaceOption.REPLACE
+    #     )
 
 
 if __name__ == "__main__":
