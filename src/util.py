@@ -61,9 +61,10 @@ def create_filename(
 def load_data_file(
         dirname: str,
         data_type: DataType,
-        replace_option: OffensiveWordReplaceOption
+        replace_option: OffensiveWordReplaceOption,
+        preprocess: bool = False
 ) -> DataItems:
-    filename = create_filename(dirname, data_type, replace_option)
+    filename = create_filename(dirname, data_type, replace_option, preprocess)
     tweets = []
     labels = []
     with open(filename, 'r', encoding='utf-8') as inp:
@@ -76,12 +77,14 @@ def load_data_file(
     return DataItems(tweets, labels)
 
 
-def load_data(dirname: str, replace_option: OffensiveWordReplaceOption) -> Data:
+def load_data(
+        dirname: str, replace_option: OffensiveWordReplaceOption, preprocessed: bool = False
+) -> Data:
     """Loads the data from the given directory and returns it"""
 
-    training = load_data_file(dirname, DataType.TRAIN, replace_option)
-    development = load_data_file(dirname, DataType.DEV, replace_option)
-    test = load_data_file(dirname, DataType.TEST, replace_option)
+    training = load_data_file(dirname, DataType.TRAIN, replace_option, preprocessed)
+    development = load_data_file(dirname, DataType.DEV, replace_option, preprocessed)
+    test = load_data_file(dirname, DataType.TEST, replace_option, preprocessed)
     return Data(training, development, test)
 
 
@@ -91,7 +94,7 @@ def write_data_file(
         data: DataItems,
         replace_option: OffensiveWordReplaceOption
 ) -> None:
-    filename = create_filename(dirname, data_type, replace_option)
+    filename = create_filename(dirname, data_type, replace_option, True)
 
     with open(filename, 'w', encoding='utf-8') as out:
         for tweet, label in zip(data.documents, data.labels):

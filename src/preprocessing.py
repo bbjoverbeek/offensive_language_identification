@@ -1,3 +1,5 @@
+import time
+
 import emoji
 import re
 from hashformers import TransformerWordSegmenter as WordSegmenter
@@ -72,41 +74,47 @@ def create_offensive_words_pattern(offensive_words: set[str]) -> re.Pattern:
 def preprocess_tweet(
         text: str,
         offensive_words_pattern: re.Pattern,
-        option: OffensiveWordReplaceOption
+        option: OffensiveWordReplaceOption,
+        preprocess_other: bool = True
 ) -> str:
     """
     Preprocesses the given text
     :param text: the text to preprocess
     :return: the preprocessed text
     """
-    text = emoji_to_text(text)
-    text = url_to_http(text)
-    text = hashtag_segmentation(text)
-    text = offensive_word_replacement(text, offensive_words_pattern, option)
+    if preprocess_other:
+        text = emoji_to_text(text)
+        text = url_to_http(text)
+        text = hashtag_segmentation(text)
+
+    if option != OffensiveWordReplaceOption.NONE:
+        text = offensive_word_replacement(text, offensive_words_pattern, option)
     return text
 
 
 def main():
     offensive_words = load_offensive_words("../data/bad-words.txt")
     pattern = create_offensive_words_pattern(offensive_words)
-    data = load_data("../data", OffensiveWordReplaceOption.NONE)
+    data = load_data("../data", OffensiveWordReplaceOption.NONE, True)
 
-    for index, tweet in enumerate(data.development.documents[:20]):
+    replace_option = OffensiveWordReplaceOption.REMOVE
+
+    for index, tweet in enumerate(data.development.documents):
         data.development.documents[index] = preprocess_tweet(
-            tweet, pattern, OffensiveWordReplaceOption.REPLACE
+            tweet, pattern, replace_option, False
         )
 
-    write_data(data, "../data", OffensiveWordReplaceOption.REPLACE)
+    for index, tweet in enumerate(data.test.documents):
+        data.test.documents[index] = preprocess_tweet(
+            tweet, pattern, replace_option, False
+        )
 
-    # for index, tweet in enumerate(data.training.documents):
-    #     data.training.documents[index] = preprocess_tweet(
-    #         tweet, pattern, OffensiveWordReplaceOption.REPLACE
-    #     )
-    #
-    # for index, tweet in enumerate(data.training.documents):
-    #     data.training.documents[index] = preprocess_tweet(
-    #         tweet, pattern, OffensiveWordReplaceOption.REPLACE
-    #     )
+    for index, tweet in enumerate(data.training.documents):
+        data.training.documents[index] = preprocess_tweet(
+            tweet, pattern, replace_option, False
+        )
+
+    write_data(data, "../data", replace_option)
 
 
 if __name__ == "__main__":
