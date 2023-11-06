@@ -12,7 +12,7 @@ CONFIGS_FOLDER="./configs/"
 RESULTS_FOLDER="./results/"
 CODE_FOLDER="./src/"
 DATA_FOLDER="./data/"
-ENV_FOLDER="./venv/"
+ENV_FOLDER="./env/"
 
 # provide parameter 'test' if you want to predict on test set instead of dev
 if [ "$2" == "test" ]; then
@@ -80,7 +80,7 @@ cp $CODE_FOLDER"predict.py" $EXPERIMENT_FOLDER"predict.py"
 source $ENV_FOLDER"bin/activate"
 
 # --- Train the model ---
-python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" -o $EXPERIMENT_FOLDER"model/">> $EXPERIMENT_FOLDER"training_log.txt"
+python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" -o $EXPERIMENT_FOLDER"model.bin">> $EXPERIMENT_FOLDER"training_log.txt"
 
 # --- Predict and evaluate on dev or test set based on TEST_SET variable ---
 if [ $TEST_SET = false ]; then

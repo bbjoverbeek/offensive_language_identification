@@ -4,6 +4,9 @@ import os.path
 import pickle
 from enum import Enum
 from pathlib import Path
+from datasets import Dataset
+from transformers import pipeline as tf_pipeline
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 import joblib
 from sklearn import pipeline
@@ -23,7 +26,7 @@ def create_default_config(create_file: bool = False) -> dict[str, str | bool]:
     }
 
     if create_file:
-        with open('features.json', 'x', encoding='utf-8') as config_file:
+        with open('config.json', 'x', encoding='utf-8') as config_file:
             json.dump(default_config, config_file, indent=4)
 
     return default_config
@@ -68,7 +71,7 @@ class ModelType(Enum):
     BASELINE = "baseline"
     FEATURES = "features"
     LSTM = "lstm"
-    LLM = "llm"
+    PLM = "plm"
 
 
 def predict_baseline(name: str, test_data: DataItems) -> dict[str, list[str]]:
@@ -95,6 +98,18 @@ def predict_features(name: str, test_data: DataItems) -> dict[str, list[str]]:
 
     return predictions
 
+def predict_plm(model_id: str, model_path: str, test_data: Dataset) -> dict[str, list[str]]:
+    """Load the fine-tuned llm and predict on the test or dev set"""
+
+    model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+    predictions = []
+    pipe = tf_pipeline('text-classification', model=model, tokenizer=tokenizer, device=0)
+    for item in test_data:
+        predictions.append(pipe(item['text']))
+    
+    return {model_id: [prediction[0]['label'] for prediction in predictions]}
 
 def write_predictions(directory: str, predictions: dict[str, list[str]]) -> None:
     for name, prediction in predictions.items():
@@ -115,6 +130,8 @@ def main() -> None:
     test_data = load_data_file(
         args.directory, data_type, offensive_word_replace_option, config["preprocessed"]
     )
+    
+    test_data_dataset = Dataset.from_dict({'text': test_data[0], 'labels': test_data[1]})
 
     model_type = ModelType(args.model_type)
     match model_type:
@@ -122,12 +139,13 @@ def main() -> None:
             predict_baseline(args.model, test_data)
         case ModelType.FEATURES:
             predictions = predict_features(args.model, test_data)
-            print(predictions)
             write_predictions(args.predictions_directory, predictions)
         case ModelType.LSTM:
             pass
-        case ModelType.LLM:
-            pass
+        case ModelType.PLM:
+            predictions = predict_plm(config['model_id'], args.model, test_data_dataset)
+            write_predictions(args.predictions_directory, predictions)
+
 
 
 if __name__ == "__main__":

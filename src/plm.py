@@ -26,14 +26,15 @@ def create_default_config(create_file: bool = False) -> dict[str, str]:
         'data_dir': './data',
         'preprocessed': True,  # True, False
         'replace_option': 'none',  # none, replace, remove
-        'evaluation_set': 'dev',  # dev, test
-        'model': 'bert-base-cased',  # model-id from huggingface.co/models
+        'evaluation_set_while_training': 'dev',  # dev, test
+        'model_id': 'bert-base-cased',  # model-id from huggingface.co/models
         'seed': None,  # int or None
         'learning_rate': 0.001,
         'batch_size': 16,
         'epochs': 5,
         'weight_decay': 0.01,
         'evaluation_strategy': 'epoch',  # epoch, steps
+        'evaluation_set': 'dev' # dev or test
     }
 
     if create_file:
@@ -60,7 +61,14 @@ def parse_args() -> argparse.Namespace:
         '-x',
         '--create_config',
         action='store_true',
-        help='Creates a config file with default parameters (lstm_config.json)',
+        help='Creates a config file with default parameters (plm_config.json)',
+    )
+
+    parser.add_argument(
+        '-o',
+        '--output_folder',
+        default='./model/',
+        help='Where to output the model when fine-tuned (default ./model/)'
     )
 
     args = parser.parse_args()
@@ -103,11 +111,11 @@ def finetune_model(
     training_args = TrainingArguments(
         output_dir='./intermediate_models',
         seed=config['seed'] if config['seed'] else 42,
-        learning_rate=config['learning_rate'],
+        # learning_rate=config['learning_rate'],
         # per_device_train_batch_size=16,
         # per_device_eval_batch_size=16,
-        num_train_epochs=config['epochs'],
-        weight_decay=config['weight_decay'],
+        # num_train_epochs=config['epochs'],
+        # weight_decay=config['weight_decay'],
         no_cuda=False,
         evaluation_strategy="epoch",
         save_strategy="epoch",
@@ -151,7 +159,7 @@ def main():
     dataset = data.to_dataset()
 
     # load tokenizer and data collator
-    tokenizer = AutoTokenizer.from_pretrained(config['model'])
+    tokenizer = AutoTokenizer.from_pretrained(config['model_id'])
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     # tokenize data
@@ -161,7 +169,7 @@ def main():
 
     trainer = finetune_model(dataset, config, tokenizer, data_collator)
 
-    trainer.save_model(output_dir='model.bin')
+    trainer.save_model(output_dir=args.output_folder)
 
     # remove all other intermediate models to save space
     rmtree('./intermediate_models')
