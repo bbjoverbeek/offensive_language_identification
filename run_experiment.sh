@@ -97,7 +97,8 @@ if [ $TEST_SET = false ]; then
             --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-            --gold-labels $DATA_FOLDER"dev.tsv" \
+            --directory $DATA_FOLDER \
+            --test-data "test" \
             --predictions-directory $EXPERIMENT_FOLDER"dev_predictions" \
             --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
             --evaluation-overview $RESULTS_FOLDER"$1".md
@@ -111,7 +112,8 @@ else
         --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-        --gold-labels $DATA_FOLDER"test.tsv" \
+        --directory $DATA_FOLDER \
+        --test-data "test" \
         --predictions-directory $EXPERIMENT_FOLDER"test_predictions" \
         --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
         --evaluation-overview $RESULTS_FOLDER"$1".md
