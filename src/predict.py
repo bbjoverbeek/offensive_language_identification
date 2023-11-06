@@ -98,6 +98,7 @@ def predict_features(name: str, test_data: DataItems) -> dict[str, list[str]]:
 
     return predictions
 
+
 def predict_plm(model_id: str, model_path: str, test_data: Dataset) -> dict[str, list[str]]:
     """Load the fine-tuned llm and predict on the test or dev set"""
 
@@ -108,8 +109,9 @@ def predict_plm(model_id: str, model_path: str, test_data: Dataset) -> dict[str,
     pipe = tf_pipeline('text-classification', model=model, tokenizer=tokenizer, device=0)
     for item in test_data:
         predictions.append(pipe(item['text']))
-    
+
     return {model_id: [prediction[0]['label'] for prediction in predictions]}
+
 
 def write_predictions(directory: str, predictions: dict[str, list[str]]) -> None:
     for name, prediction in predictions.items():
@@ -130,7 +132,7 @@ def main() -> None:
     test_data = load_data_file(
         args.directory, data_type, offensive_word_replace_option, config["preprocessed"]
     )
-    
+
     test_data_dataset = Dataset.from_dict({'text': test_data[0], 'labels': test_data[1]})
 
     model_type = ModelType(args.model_type)
@@ -145,7 +147,6 @@ def main() -> None:
         case ModelType.PLM:
             predictions = predict_plm(config['model_id'], args.model, test_data_dataset)
             write_predictions(args.predictions_directory, predictions)
-
 
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
 {
-  "replace_option": "remove",
-  "evaluation_set": "test"
+  "replace_option": "none",
+  "evaluation_set": "dev",
+  "data_dir": "./data",
+  "preprocessed": "True",
+  "run_10_best": "False"
 }

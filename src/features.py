@@ -72,6 +72,13 @@ def create_arg_parser() -> argparse.ArgumentParser:
         help='Config file to use (default features.json)',
     )
 
+    parser.add_argument(
+        '-x',
+        '--create_config',
+        action='store_true',
+        help='Creates a config file with default parameters (plm_config.json)',
+    )
+
     return parser
 
 
@@ -389,6 +396,10 @@ def best_options(replace_option: OffensiveWordReplaceOption) -> list[Options]:
 
 def main():
     args = create_arg_parser().parse_args()
+
+    if args.create_config:
+        create_default_config(True)
+        return
 
     config = create_default_config()
     config = parse_config(args.config_file, config)
