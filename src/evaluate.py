@@ -1,9 +1,39 @@
+import argparse
 from typing import NamedTuple
 
 import sklearn
 from pytablewriter import MarkdownTableWriter
 
 from src import LABELS
+from src.util import DataType, OffensiveWordReplaceOption, load_data_file
+
+
+def create_arg_parser() -> argparse.ArgumentParser:
+    """
+    Create the argument parser for the predict script.
+    :return: The argument parser.
+    """
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--model", type=str, help="The model to use."
+    )
+    parser.add_argument(
+        "--test-data", type=str, help="The test data to use."
+    )
+    parser.add_argument(
+        "--directory", type=str, help="The directory to use."
+    )
+    parser.add_argument(
+        "--predictions-directory", type=str, help="The predictions output directory."
+    )
+
+    parser.add_argument(
+        "--model-type", type=str, help="The model type."
+    )
+
+    return parser
 
 
 class Scores(NamedTuple):
@@ -68,3 +98,21 @@ def calculate_scores(
             labels, predictions, labels=LABELS
         ).tolist(),
     )
+
+
+def main():
+    args = create_arg_parser().parse_args()
+    data_type = DataType.TEST if args.test_data == "test" else DataType.DEV
+    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(
+        "none"
+    )
+
+    test_data = load_data_file(
+        args.directory, data_type, offensive_word_replace_option, True
+    )
+
+
+
+
+if __name__ == "__main__":
+    main()

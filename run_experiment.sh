@@ -12,6 +12,7 @@ CONFIGS_FOLDER="./configs/"
 RESULTS_FOLDER="./results/"
 CODE_FOLDER="./src/"
 ENV_FOLDER="./env/"
+OFFENSIVE_WORD_REPLACE_OPTION="none"
 
 # provide parameter 'test' if you want to predict on test set instead of dev
 if [ "$2" == "test" ]; then
@@ -84,26 +85,32 @@ python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" -o $EXPE
 # --- Predict and evaluate on dev or test set based on TEST_SET variable ---
 if [ $TEST_SET = false ]; then
     python3 $EXPERIMENT_FOLDER"predict.py" \
-            --model $EXPERIMENT_FOLDER"model/" \
-            --test-data $DATA_FOLDER"dev.tsv" \
-            --predictions-outp $EXPERIMENT_FOLDER"dev_predictions.txt"
+            --model $EXPERIMENT_FOLDER"model.bin" \
+            --directory $DATA_FOLDER \
+            --test-data "dev" \
+            --predictions-directory $EXPERIMENT_FOLDER"dev_predictions" \
+            --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-            --gold-labels $DATA_FOLDER"dev.tsv" \
-            --predictions $EXPERIMENT_FOLDER"dev_predictions.txt" \
-            --evaluation-outp $EXPERIMENT_FOLDER"evaluation.txt" \
+            --directory $DATA_FOLDER \
+            --test-data "test" \
+            --predictions-directory $EXPERIMENT_FOLDER"dev_predictions" \
+            --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
             --evaluation-overview $RESULTS_FOLDER"$1".md
 
 else
     python3 $EXPERIMENT_FOLDER"predict.py" \
-        --model $EXPERIMENT_FOLDER"model/" \
-        --test-data $DATA_FOLDER"test.tsv" \
-        --predictions-outp $EXPERIMENT_FOLDER"test_predictions.txt"
+        --model $EXPERIMENT_FOLDER"model.bin" \
+        --directory $DATA_FOLDER \
+        --test-data "test" \
+        --predictions-directory $EXPERIMENT_FOLDER"test_predictions" \
+        --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-        --gold-labels $DATA_FOLDER"test.tsv" \
-        --predictions $EXPERIMENT_FOLDER"test_predictions.txt" \
-        --evaluation-outp $EXPERIMENT_FOLDER"evaluation.txt" \
+        --directory $DATA_FOLDER \
+        --test-data "test" \
+        --predictions-directory $EXPERIMENT_FOLDER"test_predictions" \
+        --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
         --evaluation-overview $RESULTS_FOLDER"$1".md
 fi
 

@@ -3,7 +3,12 @@ import os
 from typing import NamedTuple
 from enum import Enum
 import json
+
+import emoji
+import spacy
 from datasets import Dataset, DatasetDict
+from tqdm import tqdm
+from transformers import pipeline
 
 
 class DataType(Enum):
@@ -92,10 +97,10 @@ def load_offensive_words(file_path: str) -> set[str]:
 
 
 def create_filename(
-    dirname: str,
-    data_type: DataType,
-    replace_option: OffensiveWordReplaceOption,
-    preprocessed: bool = False,
+        dirname: str,
+        data_type: DataType,
+        replace_option: OffensiveWordReplaceOption,
+        preprocessed: bool = False,
 ) -> str:
     """Creates a filename for the given data type and replace option"""
 
@@ -112,10 +117,10 @@ def create_filename(
 
 
 def load_data_file(
-    dirname: str,
-    data_type: DataType,
-    replace_option: OffensiveWordReplaceOption,
-    preprocess: bool = False,
+        dirname: str,
+        data_type: DataType,
+        replace_option: OffensiveWordReplaceOption,
+        preprocess: bool = False,
 ) -> DataItems:
     filename = create_filename(dirname, data_type, replace_option, preprocess)
     tweets = []
@@ -131,7 +136,7 @@ def load_data_file(
 
 
 def load_data(
-    dirname: str, replace_option: OffensiveWordReplaceOption, preprocessed: bool = False
+        dirname: str, replace_option: OffensiveWordReplaceOption, preprocessed: bool = False
 ) -> Data:
     """Loads the data from the given directory and returns it"""
 
@@ -142,10 +147,10 @@ def load_data(
 
 
 def write_data_file(
-    dirname: str,
-    data_type: DataType,
-    data: DataItems,
-    replace_option: OffensiveWordReplaceOption,
+        dirname: str,
+        data_type: DataType,
+        data: DataItems,
+        replace_option: OffensiveWordReplaceOption,
 ) -> None:
     filename = create_filename(dirname, data_type, replace_option, True)
 
@@ -155,7 +160,7 @@ def write_data_file(
 
 
 def write_data(
-    data: Data, dirname: str, replace_option: OffensiveWordReplaceOption
+        data: Data, dirname: str, replace_option: OffensiveWordReplaceOption
 ) -> None:
     write_data_file(dirname, DataType.TRAIN, data.training, replace_option)
     write_data_file(dirname, DataType.DEV, data.development, replace_option)
@@ -174,3 +179,157 @@ def parse_config(config_file: str, default_config: dict[str, str]) -> dict[str, 
             config[key] = value
 
     return config
+
+
+# The different options that can be given to the classifier.
+
+class Algorithm(Enum):
+    NAIVE_BAYES = "naive_bayes"
+    DECISION_TREES = "decision_trees"
+    RANDOM_FORESTS = "random_forests"
+    KNN = "knn"
+    SVC = "svc"
+    LINEAR_SVC = "linear_svc"
+
+
+class Vectorizer(Enum):
+    BAG_OF_WORDS = "bag_of_words"
+    TFI_DF = "tfi_df"
+    BOTH = "both"
+
+
+class ContentBasedFeatures(Enum):
+    USE = "content_features"
+    NONE = "none"
+
+
+class SentimentFeatures(Enum):
+    USE = "sentiment_features"
+    NONE = "none"
+
+
+class Ngrams(Enum):
+    UNIGRAM = 1
+    BIGRAM = 2
+    TRIGRAM = 3
+
+
+class POS(Enum):
+    """
+    The different POS taggers that can be used. They are encoded into vectors by making use of the
+    bag of words vectorizer (CountVectorizer).
+
+    The features are then combined with the features from the vectorizer that is used for the text.
+    """
+    STANDARD = "standard"
+    FINEGRAINED = "finegrained"
+    NONE = "none"
+
+
+class Preprocessing(Enum):
+    LEMMATIZE = "lemmatize"
+    NONE = "none"
+
+
+class Token(NamedTuple):
+    """
+    A token is a word in a sentence. We extract more information from this token, such as the POS
+    tags. We store this information in this class before training the models, so we don't have to
+    extract the information every time we train a model. This speeds up training and testing time.
+
+    The POS tags are extracted using the spaCy library.
+    """
+    text: str
+    lemma: str
+    pos_standard: str
+    pos_finegrained: str
+
+
+class Options(NamedTuple):
+    """
+    The options with which the classifier is trained.
+    """
+    algorithm: Algorithm  # 6 options
+    vectorizer: Vectorizer  # 3 options
+    ngram: Ngrams  # 3 options
+    pos: POS  # 3 options
+    preprocessing: Preprocessing  # 2 options
+    content_based_features: ContentBasedFeatures  # 2 options
+    sentiment_features: SentimentFeatures  # 2 options
+    offensive_word_replacement: OffensiveWordReplaceOption
+
+    # 6 * 3 * 3 * 3 * 2 * 2 * 2 * 3 = 3888 options
+
+class Document:
+    """
+    A document is a piece of text. This will be a tweet.
+    """
+    text: str
+    tokens: list[Token]
+    sentiment: float = None
+    length_document: int = None
+    average_token_length: float = None
+    fraction_uppercase: float = None
+    fraction_emoji: float = None
+
+    def __init__(self, text: str, tokens: list[Token]):
+        self.text = text
+        self.tokens = tokens
+
+    def __str__(self):
+        return f"{{\ntext: {self.text}, \ntokens: {self.tokens}, \nsentiment: {self.sentiment}, " \
+            + f"\nlength_document: {self.length_document}, " \
+            + f"\naverage_token_length: {self.average_token_length}, " \
+            + f"\nfraction_uppercase: {self.fraction_uppercase}, " \
+            + f"\nfraction_emoji: {self.fraction_emoji}\n}}"
+
+    def create_features(self, sentiment: float) -> None:
+        amount_chars = len(self.text)
+        self.fraction_emoji = emoji.emoji_count(self.text) / amount_chars
+        self.fraction_uppercase = len(
+            [char for char in self.text if char.isupper()]) / amount_chars
+        self.length_document = len(self.text)
+        self.average_token_length = sum(
+            [len(token.text) for token in self.tokens]
+        ) / len(self.tokens)
+        self.sentiment = sentiment
+
+
+def add_additional_information(docs: list[str], calculate_sentiment: bool = True) -> list[Document]:
+    """
+    Adds additional information to the tokens of the documents. This information includes the POS
+    tags, so they don't have to be extracted every time the classifier is trained. This speeds up
+    training and testing time.
+
+    :param calculate_sentiment: when you won't use the sentiment score in the features, you can set
+    this to "false" to speed up the process
+    :param docs: the docs to which the POS tags are added
+    :return: the docs with the POS tags
+    """
+    result = []
+
+    nlp = spacy.load("en_core_web_sm")
+    SENTIMENT_MODEL = "distilbert-base-uncased-finetuned-sst-2-english"
+    sentiment_analyser = pipeline(
+        "sentiment-analysis", SENTIMENT_MODEL
+    )
+
+    for text in tqdm(docs, desc="Adding additional information"):
+        doc = nlp(text)
+        tokens = [
+            Token(
+                text=token.text,
+                pos_standard=token.pos_,
+                pos_finegrained=token.tag_,
+                lemma=token.lemma_
+            ) for token in doc
+        ]
+        document = Document(text=text, tokens=tokens)
+        sentiment = sentiment_analyser(text)[0] if calculate_sentiment else {"score": 0.0}
+        document.create_features(sentiment["score"])
+        result.append(document)
+
+    for x in result:
+        print(x)
+
+    return result
