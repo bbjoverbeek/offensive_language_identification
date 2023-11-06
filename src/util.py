@@ -7,8 +7,11 @@ import json
 import emoji
 import spacy
 from datasets import Dataset, DatasetDict
+from sklearn.feature_extraction.text import TfidfVectorizer
 from tqdm import tqdm
 from transformers import pipeline
+
+LABELS = ["OFF", "NOT"]
 
 
 class DataType(Enum):
@@ -260,6 +263,7 @@ class Options(NamedTuple):
 
     # 6 * 3 * 3 * 3 * 2 * 2 * 2 * 3 = 3888 options
 
+
 class Document:
     """
     A document is a piece of text. This will be a tweet.
@@ -333,3 +337,75 @@ def add_additional_information(docs: list[str], calculate_sentiment: bool = True
         print(x)
 
     return result
+
+
+class Tokenizer:
+    options: Options
+
+    def __init__(self, options: Options):
+        self.options = options
+
+    def get_token_text_inner(self, inp):
+        """Returns the text of the token. This can be a preprocessed token."""
+        match self.options.preprocessing:
+            case Preprocessing.LEMMATIZE:
+                return " ".join([token.lemma for token in inp.tokens])
+            case Preprocessing.NONE:
+                return " ".join([token.text for token in inp.tokens])
+
+
+# Helper functions for creating the vectorizers
+
+def identity(inp: any) -> any:
+    """Returns the input."""
+    return inp
+
+
+def create_tfidf_vectorizer(
+        preprocessor, tokenizer, ngram: Ngrams
+) -> TfidfVectorizer:
+    return TfidfVectorizer(
+        preprocessor=preprocessor,
+        tokenizer=tokenizer,
+        token_pattern=None,
+        ngram_range=(ngram.value, ngram.value),
+    )
+
+
+def features_vec_both(inp):
+    return [
+        [
+            doc.length_document,
+            doc.average_token_length,
+            doc.fraction_uppercase,
+            doc.fraction_emoji,
+            doc.sentiment
+        ]
+        for doc in inp
+    ]
+
+
+def features_vec_content(inp):
+    return [
+        [
+            doc.length_document,
+            doc.average_token_length,
+            doc.fraction_uppercase,
+            doc.fraction_emoji,
+        ]
+        for doc in inp
+    ]
+
+
+def features_vec_sentiment(inp):
+    return [
+        [doc.sentiment]
+        for doc in inp
+    ]
+
+
+def features_vec_none(inp):
+    return [
+        []
+        for _doc in inp
+    ]
