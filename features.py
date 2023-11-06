@@ -13,7 +13,8 @@ from enum import Enum
 import os
 import argparse
 
-import sklearn
+import emoji
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier
@@ -21,12 +22,18 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC, LinearSVC
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.pipeline import Pipeline, FeatureUnion
-from src.util import get_data
+from tqdm import tqdm
+
+from src.evaluation import calculate_scores
+from src.util import load_data, OffensiveWordReplaceOption
 import spacy
-from pytablewriter import MarkdownTableWriter
+from transformers import pipeline
 
 nlp = spacy.load("en_core_web_sm")
-LABELS = ["OFF", "NOT"]
+SENTIMENT_MODEL = "distilbert-base-uncased-finetuned-sst-2-english"
+sentiment_analyser = pipeline(
+    "sentiment-analysis", SENTIMENT_MODEL
+)
 
 
 # Function to open the data and to run the program with certain arguments
@@ -55,10 +62,12 @@ def create_arg_parser() -> argparse.ArgumentParser:
         help="The directory where the data is stored.",
     )
     parser.add_argument(
-        "--optimized",
-        action="store_true",
-        help="Run the optimized models.",
+        "--scores_dir",
+        type=str,
+        default="scores",
+        help="The directory where the scores are stored.",
     )
+
     return parser
 
 
@@ -77,6 +86,16 @@ class Vectorizer(Enum):
     BAG_OF_WORDS = "bag_of_words"
     TFI_DF = "tfi_df"
     BOTH = "both"
+
+
+class ContentBasedFeatures(Enum):
+    USE = "content_features"
+    NONE = "none"
+
+
+class SentimentFeatures(Enum):
+    USE = "sentiment_features"
+    NONE = "none"
 
 
 class Ngrams(Enum):
@@ -125,25 +144,64 @@ class Options(NamedTuple):
     ngram: Ngrams  # 3 options
     pos: POS  # 3 options
     preprocessing: Preprocessing  # 2 options
+    content_based_features: ContentBasedFeatures  # 2 options
+    sentiment_features: SentimentFeatures  # 2 options
+    offensive_word_replacement: OffensiveWordReplaceOption
 
-    # 6 * 3 * 3 * 3 * 2 = 324 options
+    # 6 * 3 * 3 * 3 * 2 * 2 * 2 * 3 = 3888 options
+
+
+class Document:
+    """
+    A document is a piece of text. This will be a tweet.
+    """
+    text: str
+    tokens: list[Token]
+    sentiment: float = None
+    length_document: int = None
+    average_token_length: float = None
+    fraction_uppercase: float = None
+    fraction_emoji: float = None
+
+    def __init__(self, text: str, tokens: list[Token]):
+        self.text = text
+        self.tokens = tokens
+
+    def __str__(self):
+        return f"{{\ntext: {self.text}, \ntokens: {self.tokens}, \nsentiment: {self.sentiment}, " \
+            + f"\nlength_document: {self.length_document}, " \
+            + f"\naverage_token_length: {self.average_token_length}, " \
+            + f"\nfraction_uppercase: {self.fraction_uppercase}, " \
+            + f"\nfraction_emoji: {self.fraction_emoji}\n}}"
+
+    def create_features(self, sentiment: float) -> None:
+        amount_chars = len(self.text)
+        self.fraction_emoji = emoji.emoji_count(self.text) / amount_chars
+        self.fraction_uppercase = len([char for char in self.text if char.isupper()]) / amount_chars
+        self.length_document = len(self.text)
+        self.average_token_length = sum(
+            [len(token.text) for token in self.tokens]
+        ) / len(self.tokens)
+        self.sentiment = sentiment
 
 
 # Functions to add additional information to the tokens
 
-def add_additional_information(documents: list[str]) -> list[list[Token]]:
+def add_additional_information(docs: list[str], calculate_sentiment: bool = True) -> list[Document]:
     """
     Adds additional information to the tokens of the documents. This information includes the POS
     tags, so they don't have to be extracted every time the classifier is trained. This speeds up
     training and testing time.
 
-    :param documents: the docs to which the POS tags are added
+    :param calculate_sentiment: when you won't use the sentiment score in the features, you can set
+    this to "false" to speed up the process
+    :param docs: the docs to which the POS tags are added
     :return: the docs with the POS tags
     """
     result = []
 
-    for document in documents:
-        doc = nlp(document)
+    for text in tqdm(docs, desc="Adding additional information"):
+        doc = nlp(text)
         tokens = [
             Token(
                 text=token.text,
@@ -152,8 +210,13 @@ def add_additional_information(documents: list[str]) -> list[list[Token]]:
                 lemma=token.lemma_
             ) for token in doc
         ]
+        document = Document(text=text, tokens=tokens)
+        sentiment = sentiment_analyser(text)[0] if calculate_sentiment else {"score": 0.0}
+        document.create_features(sentiment["score"])
+        result.append(document)
 
-        result.append(tokens)
+    for x in result:
+        print(x)
 
     return result
 
@@ -166,6 +229,7 @@ def create_count_vectorizer(
     return CountVectorizer(
         preprocessor=preprocessor,
         tokenizer=tokenizer,
+        token_pattern=None,
         ngram_range=(ngram.value, ngram.value),
     )
 
@@ -176,8 +240,56 @@ def create_tfidf_vectorizer(
     return TfidfVectorizer(
         preprocessor=preprocessor,
         tokenizer=tokenizer,
+        token_pattern=None,
         ngram_range=(ngram.value, ngram.value),
     )
+
+
+def create_feature_vectorizer(options: Options) -> FunctionTransformer:
+    match (options.content_based_features, options.sentiment_features):
+        case (ContentBasedFeatures.USE, SentimentFeatures.USE):
+            return FunctionTransformer(
+                lambda inp: [
+                    [
+                        doc.length_document,
+                        doc.average_token_length,
+                        doc.fraction_uppercase,
+                        doc.fraction_emoji,
+                        doc.sentiment
+                    ]
+                    for doc in inp
+                ],
+                validate=False
+            )
+        case (ContentBasedFeatures.USE, SentimentFeatures.NONE):
+            return FunctionTransformer(
+                lambda inp: [
+                    [
+                        doc.length_document,
+                        doc.average_token_length,
+                        doc.fraction_uppercase,
+                        doc.fraction_emoji,
+                    ]
+                    for doc in inp
+                ],
+                validate=False
+            )
+        case (ContentBasedFeatures.NONE, SentimentFeatures.USE):
+            return FunctionTransformer(
+                lambda inp: [
+                    [doc.sentiment]
+                    for doc in inp
+                ],
+                validate=False
+            )
+        case (ContentBasedFeatures.NONE, SentimentFeatures.NONE):
+            return FunctionTransformer(
+                lambda inp: [
+                    []
+                    for _doc in inp
+                ],
+                validate=False
+            )
 
 
 def create_vectorizer(options: Options) -> any:
@@ -212,6 +324,9 @@ def create_vectorizer(options: Options) -> any:
                 lambda inp: get_token_pos_tag(inp, options.pos), identity, options.ngram
             )))
 
+    features_vec = create_feature_vectorizer(options)
+    vec.append(("features", features_vec))
+
     return FeatureUnion(vec)
 
 
@@ -222,23 +337,23 @@ def identity(inp: any) -> any:
     return inp
 
 
-def get_token_text(inp: list[Token], preprocessing: Preprocessing) -> str:
+def get_token_text(inp: Document, preprocessing: Preprocessing) -> str:
     """Returns the text of the token. This can be a preprocessed token."""
     match preprocessing:
         case Preprocessing.LEMMATIZE:
-            return " ".join([token.lemma for token in inp])
+            return " ".join([token.lemma for token in inp.tokens])
         case Preprocessing.NONE:
-            return " ".join([token.text for token in inp])
+            return " ".join([token.text for token in inp.tokens])
 
 
-def get_token_pos_tag(inp: list[Token], pos: POS) -> str:
+def get_token_pos_tag(inp: Document, pos: POS) -> str:
     """Returns the POS tags of the tokens."""
     match pos:
         case POS.STANDARD:
-            tags = [token.pos_standard for token in inp]
+            tags = [token.pos_standard for token in inp.tokens]
             return " ".join(tags)
         case POS.FINEGRAINED:
-            tags = [token.pos_finegrained for token in inp]
+            tags = [token.pos_finegrained for token in inp.tokens]
             return " ".join(tags)
         case POS.NONE:
             return ""
@@ -287,7 +402,7 @@ def create_classifier(options: Options) -> Pipeline:
 
 
 def train_classifier(
-        options: Options, train_docs: list[list[Token]], train_labels: list[str],
+        options: Options, train_docs: list[Document], train_labels: list[str],
 ) -> Pipeline:
     """
     Run the classifier with the given algorithm and train and test data.
@@ -297,75 +412,46 @@ def train_classifier(
     return classifier
 
 
-class Scores(NamedTuple):
-    """
-    The scores of the classifier.
-    """
-    name: str
-    accuracy: float
-    precision: float
-    recall: float
-    f1: float
-    confusion_matrix: list[list[int | str]]
-
-    def __str__(self):
-        output = f"# Scores for {self.name}\n"
-        results = [
-            ["Accuracy", self.accuracy],
-            ["Precision (macro)", self.precision],
-            ["Recall (macro)", self.recall],
-            ["F1 (macro)", self.f1],
-        ]
-        output += str(MarkdownTableWriter(headers=["Score", "Value"], value_matrix=results))
-        output += f"\n### Confusion matrix:\n"
-        cm = MarkdownTableWriter(headers=LABELS, value_matrix=self.confusion_matrix)
-        output += str(cm)
-
-        return output
-
-
 def create_model_name(options: Options) -> str:
     """
     Create a name for the model based on the options.
     """
     return f"{options.algorithm.value}__{options.vectorizer.value}__{options.ngram.value}-gram__" \
-        + f"{options.pos.value}__{options.preprocessing.value}"
-
-
-def calculate_scores(
-        options: Options, predictions: list[str], labels: list[str], precision: int
-) -> Scores:
-    """
-    Calculate the scores of the classifier and return them as a dict.
-    """
-
-    return Scores(
-        name=create_model_name(options),
-        accuracy=round(sklearn.metrics.accuracy_score(labels, predictions), precision),
-        precision=round(
-            sklearn.metrics.precision_score(labels, predictions, average="macro"), precision
-        ),
-        recall=round(sklearn.metrics.recall_score(labels, predictions, average="macro"), precision),
-        f1=round(sklearn.metrics.f1_score(labels, predictions, average="macro"), precision),
-        confusion_matrix=sklearn.metrics.confusion_matrix(
-            labels, predictions, labels=LABELS
-        ).tolist(),
-    )
+        + f"{options.pos.value}__{options.preprocessing.value}" \
+        + f"__{options.content_based_features.value}__{options.sentiment_features.value}" \
+        + f"__{options.offensive_word_replacement.value}"
 
 
 def run_models(
+        directory: str,
         all_options: list[Options],
-        train_docs: list[list[Token]],
+        train_docs: list[Document],
         train_labels: list[str],
-        docs: list[list[Token]],
+        docs: list[Document],
         labels: list[str],
         precision: int = 3,
 ) -> None:
-    for options in all_options:
+    for options in tqdm(all_options, desc="Running models", leave=False):
         model = train_classifier(options, train_docs, train_labels)
         predictions = model.predict(docs)
-        scores = calculate_scores(options, predictions, labels, precision)
-        print(scores)
+
+        name = create_model_name(options)
+        scores = calculate_scores(name, predictions, labels, precision)
+
+        directory = os.path.join(os.getcwd(), directory)
+        if os.path.exists(directory) is False:
+            os.mkdir(directory)
+
+        with open(os.path.join(directory, f"{scores.name}.md"), "w") as f:
+            f.write(scores.format(True))
+
+        all_scores_file = os.path.join(directory, "all_scores.csv")
+        if os.path.exists(all_scores_file) is False:
+            with open(all_scores_file, "w") as f:
+                f.write("name,accuracy,precision,recall,f1\n")
+
+        with open(all_scores_file, "a") as f:
+            f.write(scores.format(False))
 
 
 def save_model(model: Pipeline, options: Options) -> None:
@@ -377,7 +463,7 @@ def save_model(model: Pipeline, options: Options) -> None:
         pickle.dump(model, f)
 
 
-def create_all_options() -> list[Options]:
+def create_all_options(offensive_word_replace_option: OffensiveWordReplaceOption) -> list[Options]:
     """
     Create all possible options to train a classifier. This is done by creating all possible
     combinations of the different options.
@@ -388,13 +474,22 @@ def create_all_options() -> list[Options]:
     # know a method to create all combinations without the use of nested for loops.
     return [
         Options(
+            offensive_word_replacement=offensive_word_replace_option,
             algorithm=alg,
             vectorizer=vec,
             ngram=ng,
             pos=p,
-            preprocessing=prep
-        ) for alg, vec, ng, p, prep in itertools.product(
-            Algorithm, Vectorizer, Ngrams, POS, Preprocessing
+            preprocessing=prep,
+            content_based_features=cont,
+            sentiment_features=sent
+        ) for alg, vec, ng, p, prep, cont, sent in itertools.product(
+            Algorithm,
+            Vectorizer,
+            Ngrams,
+            POS,
+            Preprocessing,
+            ContentBasedFeatures,
+            SentimentFeatures
         )
     ]
 
@@ -402,42 +497,41 @@ def create_all_options() -> list[Options]:
 def main():
     args = create_arg_parser().parse_args()
 
-    data = get_data(args.dirname)
+    print("hi")
+
+    offensive_word_replace_option = OffensiveWordReplaceOption.NONE
+    data = load_data(args.dirname, offensive_word_replace_option, True)
 
     # These docs and labels are used for testing. You can use the dev data or the test data.
     (docs, labels) = (data.test.documents, data.test.labels) if args.test else (
         data.development.documents, data.development.labels
     )
 
+    print("hi")
+
     (train_docs, train_labels, docs, labels) = (
-        data.training.documents[:64], data.training.labels[:64], docs[:64], labels[:64]
+        data.training.documents, data.training.labels, docs, labels
     )
 
-    train_docs = add_additional_information(train_docs)
-    docs = add_additional_information(docs)
+    train_docs = add_additional_information(train_docs, False)
+    docs = add_additional_information(docs, False)
+
+    print("hi")
 
     all_options = [Options(
-        algorithm=Algorithm.NAIVE_BAYES,
+        offensive_word_replacement=offensive_word_replace_option,
         vectorizer=Vectorizer.BAG_OF_WORDS,
         ngram=Ngrams.UNIGRAM,
         pos=POS.NONE,
-        preprocessing=Preprocessing.NONE
+        algorithm=Algorithm.NAIVE_BAYES,
+        preprocessing=Preprocessing.NONE,
+        content_based_features=ContentBasedFeatures.NONE,
+        sentiment_features=SentimentFeatures.NONE
     )]
 
-    # if args.optimized:
-    #     all_options = create_all_options()
-    # else:
-    #     all_options = [
-    #         Options(
-    #             algorithm=algorithm,
-    #             vectorizer=Vectorizer.BAG_OF_WORDS,
-    #             ngram=Ngrams.UNIGRAM,
-    #             pos=POS.NONE,
-    #             preprocessing=Preprocessing.NONE
-    #         ) for algorithm in Algorithm
-    #     ]
+    # all_options = create_all_options(offensive_word_replace_option)
 
-    run_models(all_options, train_docs, train_labels, docs, labels)
+    run_models("baseline_scores", all_options, train_docs, train_labels, docs, labels)
 
 
 if __name__ == '__main__':
