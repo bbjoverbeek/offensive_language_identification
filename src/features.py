@@ -39,6 +39,7 @@ def create_default_config(create_file: bool = False) -> dict[str, str | bool]:
         'preprocessed': True,  # True, False
         'replace_option': 'none',  # none, replace, remove
         'evaluation_set': 'dev',  # dev, test
+        'run_10_best': False,
     }
 
     if create_file:
@@ -271,29 +272,136 @@ def create_all_options(offensive_word_replace_option: OffensiveWordReplaceOption
     ]
 
 
+def best_options(replace_option: OffensiveWordReplaceOption) -> list[Options]:
+    """
+    This creates the 10 best options for the classifier. These options are based on the results
+    on the regular tweets, so where the offensive words are not replaced.
+    :param replace_option: the option to replace the offensive words
+    :return: the 10 best models
+    """
+    return [
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.NONE,
+            sentiment_features=SentimentFeatures.USE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.USE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.STANDARD,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.USE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.NONE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.USE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.NONE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.NONE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.NONE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.NONE,
+            sentiment_features=SentimentFeatures.NONE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.NONE,
+            preprocessing=Preprocessing.NONE,
+            content_based_features=ContentBasedFeatures.NONE,
+            sentiment_features=SentimentFeatures.NONE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.STANDARD,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.NONE,
+            offensive_word_replacement=replace_option
+        ),
+        Options(
+            algorithm=Algorithm.LINEAR_SVC,
+            vectorizer=Vectorizer.TFI_DF,
+            ngram=Ngrams.TRIGRAM,
+            pos=POS.FINEGRAINED,
+            preprocessing=Preprocessing.LEMMATIZE,
+            content_based_features=ContentBasedFeatures.USE,
+            sentiment_features=SentimentFeatures.USE,
+            offensive_word_replacement=replace_option
+        )
+    ]
+
+
 def main():
     args = create_arg_parser().parse_args()
 
-    config = parse_config(args.config_file, create_default_config())
+    config = create_default_config()
+    config = parse_config(args.config_file, config)
 
-    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(config['replace_option'])
+    print("hiiiii")
+    print(config)
+
+    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(
+        config['replace_option']
+    )
     data = load_data(config['data_dir'], offensive_word_replace_option, config['preprocessed'])
-    train_docs = add_additional_information(data.training.documents[:10], False)
+    train_docs = add_additional_information(data.training.documents, True)
 
-    all_options = [Options(
-        offensive_word_replacement=offensive_word_replace_option,
-        vectorizer=Vectorizer.BAG_OF_WORDS,
-        ngram=Ngrams.UNIGRAM,
-        pos=POS.NONE,
-        algorithm=Algorithm.NAIVE_BAYES,
-        preprocessing=Preprocessing.NONE,
-        content_based_features=ContentBasedFeatures.NONE,
-        sentiment_features=SentimentFeatures.NONE
-    )]
+    all_options = best_options(offensive_word_replace_option) if config["run_10_best"] else \
+        create_all_options(offensive_word_replace_option)
 
-    # all_options = create_all_options(offensive_word_replace_option)
-
-    run_models(all_options, train_docs, data.training.labels[:10])
+    run_models(all_options, train_docs, data.training.labels)
 
 
 if __name__ == '__main__':

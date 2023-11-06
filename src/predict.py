@@ -90,7 +90,7 @@ def predict_baseline(name: str, test_data: DataItems) -> dict[str, list[str]]:
 def predict_features(name: str, test_data: DataItems) -> dict[str, list[str]]:
     models: list[tuple[pipeline.Pipeline, str]] = joblib.load(name)
     predictions = {}
-    docs = add_additional_information(test_data.documents[:10], True)
+    docs = add_additional_information(test_data.documents, True)
 
     for model, name in models:
         prediction = model.predict(docs).tolist()

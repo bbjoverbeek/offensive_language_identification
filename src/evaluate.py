@@ -139,7 +139,7 @@ def main():
             for line in f:
                 predictions.append(line.strip())
 
-        scores = calculate_scores(file, predictions[:10], test_data.labels[:10], 3)
+        scores = calculate_scores(file, predictions, test_data.labels, 3)
 
         directory = os.path.join(os.getcwd(), args.evaluation_directory)
 
