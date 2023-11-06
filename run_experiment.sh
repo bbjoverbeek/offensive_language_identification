@@ -1,6 +1,6 @@
 #!/bin/bash
 # This program is a bash script that runs the experiments for the paper. 
-# It takes one command line argument to run: baseline, features, lstm, plm.
+# It takes one command line argument to run: features, lstm, plm.
 # make sure that there is a python script wih the same name in the src folder, 
 # and a config file with the same name in the configs folder.
 
@@ -12,7 +12,7 @@ CONFIGS_FOLDER="./configs/"
 RESULTS_FOLDER="./results/"
 CODE_FOLDER="./src/"
 DATA_FOLDER="./data/"
-ENV_FOLDER="./venv/"
+ENV_FOLDER="./env/"
 
 # provide parameter 'test' if you want to predict on test set instead of dev
 if [ "$2" == "test" ]; then
@@ -49,11 +49,6 @@ mkdir $EXPERIMENT_FOLDER
 # --- Use command line arguments to copy the correct train file ---
 case $1 in
 
-  "baseline")
-    cp $CODE_FOLDER"baseline.py" $EXPERIMENT_FOLDER"train.py"
-    cp $CONFIGS_FOLDER"baseline.json" $EXPERIMENT_FOLDER"config.json"
-    ;;
-
   "features")
     cp $CODE_FOLDER"features.py" $EXPERIMENT_FOLDER"train.py"
     cp $CONFIGS_FOLDER"features.json" $EXPERIMENT_FOLDER"config.json"
@@ -85,7 +80,7 @@ cp $CODE_FOLDER"predict.py" $EXPERIMENT_FOLDER"predict.py"
 source $ENV_FOLDER"bin/activate"
 
 # --- Train the model ---
-python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" > $EXPERIMENT_FOLDER"training_log.txt"
+python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" -o $EXPERIMENT_FOLDER"model.bin">> $EXPERIMENT_FOLDER"training_log.txt"
 
 # --- Predict and evaluate on dev or test set based on TEST_SET variable ---
 if [ $TEST_SET = false ]; then
@@ -118,4 +113,4 @@ else
 fi
 
 # --- Deactivate virtual environment---
-deactivate
+# deactivate
