@@ -7,11 +7,12 @@ predict if a piece of text has offensive language or not.
 """
 
 import itertools
-import pickle
-import os
 import argparse
+import json
+import os
+import pathlib
 
-import emoji
+import joblib
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import MultinomialNB
@@ -22,15 +23,29 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.pipeline import Pipeline, FeatureUnion
 from tqdm import tqdm
 
-from src.evaluate import calculate_scores
-from src.util import load_data, OffensiveWordReplaceOption, Token, Ngrams, Options, \
+from util import load_data, OffensiveWordReplaceOption, Token, Ngrams, Options, \
     ContentBasedFeatures, SentimentFeatures, Vectorizer, POS, Preprocessing, Algorithm, Document, \
-    add_additional_information
-import spacy
-from transformers import pipeline
+    add_additional_information, Tokenizer, identity, features_vec_both, features_vec_content, \
+    features_vec_sentiment, features_vec_none, create_tfidf_vectorizer, parse_config
 
 
 # Function to open the data and to run the program with certain arguments
+
+
+def create_default_config(create_file: bool = False) -> dict[str, str | bool]:
+    """Creates a config file with default parameters, and returns them"""
+    default_config = {
+        'data_dir': './data',
+        'preprocessed': True,  # True, False
+        'replace_option': 'none',  # none, replace, remove
+        'evaluation_set': 'dev',  # dev, test
+    }
+
+    if create_file:
+        with open('features.json', 'x', encoding='utf-8') as config_file:
+            json.dump(default_config, config_file, indent=4)
+
+    return default_config
 
 
 def create_arg_parser() -> argparse.ArgumentParser:
@@ -45,21 +60,11 @@ def create_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Run the classifier with the test data.",
-    )
-    parser.add_argument(
-        "--dirname",
+        '-c',
+        '--config_file',
+        default='features.json',
         type=str,
-        default="data",
-        help="The directory where the data is stored.",
-    )
-    parser.add_argument(
-        "--scores_dir",
-        type=str,
-        default="scores",
-        help="The directory where the scores are stored.",
+        help='Config file to use (default features.json)',
     )
 
     return parser
@@ -81,60 +86,23 @@ def create_count_vectorizer(
     )
 
 
-def create_tfidf_vectorizer(
-        preprocessor, tokenizer, ngram: Ngrams
-) -> TfidfVectorizer:
-    return TfidfVectorizer(
-        preprocessor=preprocessor,
-        tokenizer=tokenizer,
-        token_pattern=None,
-        ngram_range=(ngram.value, ngram.value),
-    )
-
-
 def create_feature_vectorizer(options: Options) -> FunctionTransformer:
     match (options.content_based_features, options.sentiment_features):
         case (ContentBasedFeatures.USE, SentimentFeatures.USE):
+
             return FunctionTransformer(
-                lambda inp: [
-                    [
-                        doc.length_document,
-                        doc.average_token_length,
-                        doc.fraction_uppercase,
-                        doc.fraction_emoji,
-                        doc.sentiment
-                    ]
-                    for doc in inp
-                ],
-                validate=False
+                features_vec_both, validate=False
             )
         case (ContentBasedFeatures.USE, SentimentFeatures.NONE):
-            return FunctionTransformer(
-                lambda inp: [
-                    [
-                        doc.length_document,
-                        doc.average_token_length,
-                        doc.fraction_uppercase,
-                        doc.fraction_emoji,
-                    ]
-                    for doc in inp
-                ],
-                validate=False
-            )
+
+            return FunctionTransformer(features_vec_content, validate=False)
         case (ContentBasedFeatures.NONE, SentimentFeatures.USE):
-            return FunctionTransformer(
-                lambda inp: [
-                    [doc.sentiment]
-                    for doc in inp
-                ],
-                validate=False
-            )
+
+            return FunctionTransformer(features_vec_sentiment, validate=False)
         case (ContentBasedFeatures.NONE, SentimentFeatures.NONE):
+
             return FunctionTransformer(
-                lambda inp: [
-                    []
-                    for _doc in inp
-                ],
+                features_vec_none,
                 validate=False
             )
 
@@ -147,50 +115,37 @@ def create_vectorizer(options: Options) -> any:
     :return: a vectorizer is returned
     """
     vec = []
+
+    tokenizer = Tokenizer(options)
+
     match options.vectorizer:
         case Vectorizer.BAG_OF_WORDS:
             vec.append(("bow", create_count_vectorizer(
-                lambda inp: get_token_text(inp, options.preprocessing), identity, options.ngram
+                tokenizer.get_token_text_inner, identity, options.ngram
             )))
         case Vectorizer.TFI_DF:
             vec.append(("tfidf", create_tfidf_vectorizer(
-                lambda inp: get_token_text(inp, options.preprocessing), identity, options.ngram
+                tokenizer.get_token_text_inner, identity, options.ngram
             )))
         case Vectorizer.BOTH:
             vec.append(("bow", create_count_vectorizer(
-                lambda inp: get_token_text(inp, options.preprocessing), identity, options.ngram
+                tokenizer.get_token_text_inner, identity, options.ngram
             )))
             vec.append(("tfidf", create_tfidf_vectorizer(
-                lambda inp: get_token_text(inp, options.preprocessing), identity, options.ngram
+                tokenizer.get_token_text_inner, identity, options.ngram
             )))
 
     match options.pos:
         case POS.STANDARD | POS.FINEGRAINED:
             name = "pos_standard" if options.pos == POS.STANDARD else "pos_finegrained"
             vec.append((name, create_count_vectorizer(
-                lambda inp: get_token_pos_tag(inp, options.pos), identity, options.ngram
+                tokenizer.get_token_text_inner, identity, options.ngram
             )))
 
     features_vec = create_feature_vectorizer(options)
     vec.append(("features", features_vec))
 
     return FeatureUnion(vec)
-
-
-# Helper functions for creating the vectorizers
-
-def identity(inp: any) -> any:
-    """Returns the input."""
-    return inp
-
-
-def get_token_text(inp: Document, preprocessing: Preprocessing) -> str:
-    """Returns the text of the token. This can be a preprocessed token."""
-    match preprocessing:
-        case Preprocessing.LEMMATIZE:
-            return " ".join([token.lemma for token in inp.tokens])
-        case Preprocessing.NONE:
-            return " ".join([token.text for token in inp.tokens])
 
 
 def get_token_pos_tag(inp: Document, pos: POS) -> str:
@@ -279,7 +234,10 @@ def run_models(
         model = train_classifier(options, train_docs, train_labels)
         name = create_model_name(options)
         models.append((model, name))
-    pickle.dump(models, open("./model.bin", "wb"))
+
+    path = os.path.join(pathlib.Path(__file__).parent.resolve(), "model.bin")
+    print(path)
+    joblib.dump(models, path)
 
 
 def create_all_options(offensive_word_replace_option: OffensiveWordReplaceOption) -> list[Options]:
@@ -313,36 +271,14 @@ def create_all_options(offensive_word_replace_option: OffensiveWordReplaceOption
     ]
 
 
-def predict(model: Pipeline, docs: list[Document], options: Options, labels: list[str],
-            precision: int, directory: str
-            ) -> list[str]:
-    predictions = model.predict(docs)
-
-    name = create_model_name(options)
-    scores = calculate_scores(name, predictions, labels, precision)
-
-    directory = os.path.join(os.getcwd(), directory)
-    if os.path.exists(directory) is False:
-        os.mkdir(directory)
-
-    with open(os.path.join(directory, f"{scores.name}.md"), "w") as f:
-        f.write(scores.format(True))
-
-    all_scores_file = os.path.join(directory, "all_scores.csv")
-    if os.path.exists(all_scores_file) is False:
-        with open(all_scores_file, "w") as f:
-            f.write("name,accuracy,precision,recall,f1\n")
-
-    with open(all_scores_file, "a") as f:
-        f.write(scores.format(False))
-
-
 def main():
     args = create_arg_parser().parse_args()
 
-    offensive_word_replace_option = OffensiveWordReplaceOption.NONE
-    data = load_data(args.dirname, offensive_word_replace_option, True)
-    train_docs = add_additional_information(data.training.documents, False)
+    config = parse_config(args.config_file, create_default_config())
+
+    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(config['replace_option'])
+    data = load_data(config['data_dir'], offensive_word_replace_option, config['preprocessed'])
+    train_docs = add_additional_information(data.training.documents[:10], False)
 
     all_options = [Options(
         offensive_word_replacement=offensive_word_replace_option,
@@ -357,7 +293,7 @@ def main():
 
     # all_options = create_all_options(offensive_word_replace_option)
 
-    run_models(all_options, train_docs, data.training.labels)
+    run_models(all_options, train_docs, data.training.labels[:10])
 
 
 if __name__ == '__main__':

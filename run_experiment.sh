@@ -11,8 +11,8 @@ EXPERIMENTS_FOLDER="./experiments/"
 CONFIGS_FOLDER="./configs/"
 RESULTS_FOLDER="./results/"
 CODE_FOLDER="./src/"
-ENV_FOLDER="./env/"
-OFFENSIVE_WORD_REPLACE_OPTION="none"
+DATA_FOLDER="./data/"
+ENV_FOLDER="./venv/"
 
 # provide parameter 'test' if you want to predict on test set instead of dev
 if [ "$2" == "test" ]; then
@@ -86,32 +86,30 @@ python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" -o $EXPE
 if [ $TEST_SET = false ]; then
     python3 $EXPERIMENT_FOLDER"predict.py" \
             --model $EXPERIMENT_FOLDER"model.bin" \
-            --directory $DATA_FOLDER \
-            --test-data "dev" \
+            --directory "$DATA_FOLDER" \
+            -c $EXPERIMENT_FOLDER"config.json" \
             --predictions-directory $EXPERIMENT_FOLDER"dev_predictions" \
             --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-            --directory $DATA_FOLDER \
-            --test-data "test" \
+            --directory "$DATA_FOLDER" \
+            -c $EXPERIMENT_FOLDER"config.json" \
             --predictions-directory $EXPERIMENT_FOLDER"dev_predictions" \
-            --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
-            --evaluation-overview $RESULTS_FOLDER"$1".md
+            --evaluation-directory $EXPERIMENT_FOLDER"dev_evaluation"
 
 else
     python3 $EXPERIMENT_FOLDER"predict.py" \
         --model $EXPERIMENT_FOLDER"model.bin" \
-        --directory $DATA_FOLDER \
-        --test-data "test" \
+        --directory "$DATA_FOLDER" \
+        -c $EXPERIMENT_FOLDER"config.json" \
         --predictions-directory $EXPERIMENT_FOLDER"test_predictions" \
         --model-type $1
 
     python3 $EXPERIMENT_FOLDER"evaluate.py" \
-        --directory $DATA_FOLDER \
-        --test-data "test" \
+        --directory "$DATA_FOLDER" \
+        -c $EXPERIMENT_FOLDER"config.json" \
         --predictions-directory $EXPERIMENT_FOLDER"test_predictions" \
-        --evaluation-directory $EXPERIMENT_FOLDER"evaluation.txt" \
-        --evaluation-overview $RESULTS_FOLDER"$1".md
+        --evaluation-directory $EXPERIMENT_FOLDER"test_evaluation"
 fi
 
 # --- Deactivate virtual environment---

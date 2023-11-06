@@ -1,11 +1,28 @@
 import argparse
+import json
+import os
 from typing import NamedTuple
 
 import sklearn
 from pytablewriter import MarkdownTableWriter
 
-from src import LABELS
-from src.util import DataType, OffensiveWordReplaceOption, load_data_file
+from util import DataType, OffensiveWordReplaceOption, load_data_file, LABELS, parse_config
+
+
+def create_default_config(create_file: bool = False) -> dict[str, str | bool]:
+    """Creates a config file with default parameters, and returns them"""
+    default_config = {
+        'data_dir': './data',
+        'preprocessed': True,  # True, False
+        'replace_option': 'none',  # none, replace, remove
+        'evaluation_set': 'dev',  # dev, test
+    }
+
+    if create_file:
+        with open('features.json', 'x', encoding='utf-8') as config_file:
+            json.dump(default_config, config_file, indent=4)
+
+    return default_config
 
 
 def create_arg_parser() -> argparse.ArgumentParser:
@@ -17,20 +34,21 @@ def create_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model", type=str, help="The model to use."
+        '-c',
+        '--config_file',
+        type=str,
+        help='Config file to use',
     )
-    parser.add_argument(
-        "--test-data", type=str, help="The test data to use."
-    )
+
     parser.add_argument(
         "--directory", type=str, help="The directory to use."
     )
     parser.add_argument(
-        "--predictions-directory", type=str, help="The predictions output directory."
+        "--predictions-directory", type=str, help="The predictions input directory."
     )
 
     parser.add_argument(
-        "--model-type", type=str, help="The model type."
+        "--evaluation-directory", type=str, help="The evaluation output directory."
     )
 
     return parser
@@ -102,16 +120,42 @@ def calculate_scores(
 
 def main():
     args = create_arg_parser().parse_args()
-    data_type = DataType.TEST if args.test_data == "test" else DataType.DEV
-    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(
-        "none"
-    )
+
+    config = parse_config(args.config_file, create_default_config())
+
+    data_type = DataType.TEST if config["evaluation_set"] == "test" else DataType.DEV
+    offensive_word_replace_option = OffensiveWordReplaceOption.from_str(config["replace_option"])
 
     test_data = load_data_file(
-        args.directory, data_type, offensive_word_replace_option, True
+        args.directory, data_type, offensive_word_replace_option, config["preprocessed"]
     )
 
+    files = os.listdir(args.predictions_directory)
+    files = [f for f in files if os.path.isfile(args.predictions_directory + '/' + f)]
 
+    for file in files:
+        predictions = []
+        with open(args.predictions_directory + '/' + file, 'r') as f:
+            for line in f:
+                predictions.append(line.strip())
+
+        scores = calculate_scores(file, predictions[:10], test_data.labels[:10], 3)
+
+        directory = os.path.join(os.getcwd(), args.evaluation_directory)
+
+        if os.path.exists(directory) is False:
+            os.mkdir(directory)
+
+        with open(os.path.join(directory, f"{scores.name}.md"), "w") as f:
+            f.write(scores.format(True))
+
+        all_scores_file = os.path.join(directory, "all_scores.csv")
+        if os.path.exists(all_scores_file) is False:
+            with open(all_scores_file, "w") as f:
+                f.write("name,accuracy,precision,recall,f1\n")
+
+        with open(all_scores_file, "a") as f:
+            f.write(scores.format(False))
 
 
 if __name__ == "__main__":
