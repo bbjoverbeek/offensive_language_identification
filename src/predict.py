@@ -104,6 +104,7 @@ def predict_features(name: str, test_data: DataItems) -> dict[str, list[str]]:
     return predictions
 
 
+<<<<<<< HEAD
 def predict_lstm(model, test_data: Dataset) -> dict[str, list[str]]:
     """Do predictions and measure accuracy on our own test set (that we split off train)"""
     predictions = model.predict(test_data['train'])
@@ -116,6 +117,9 @@ def predict_lstm(model, test_data: Dataset) -> dict[str, list[str]]:
 def predict_plm(
     model_id: str, model_path: str, test_data: Dataset
 ) -> dict[str, list[str]]:
+=======
+def predict_plm(model_id: str, model_path: str, test_data: Dataset) -> dict[str, list[str]]:
+>>>>>>> 1d758352cfc4bd24954e638536b8cafd3f622048
     """Load the fine-tuned llm and predict on the test or dev set"""
 
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
@@ -153,7 +157,11 @@ def main() -> None:
         args.directory, data_type, offensive_word_replace_option, config["preprocessed"]
     )
 
+<<<<<<< HEAD
     test_dataset = Dataset.from_dict({'text': test_data[0], 'labels': test_data[1]})
+=======
+    test_data_dataset = Dataset.from_dict({'text': test_data[0], 'labels': test_data[1]})
+>>>>>>> 1d758352cfc4bd24954e638536b8cafd3f622048
 
     model_type = ModelType(args.model_type)
     match model_type:
@@ -168,7 +176,6 @@ def main() -> None:
         case ModelType.PLM:
             predictions = predict_plm(config['model_id'], args.model, test_dataset)
             write_predictions(args.predictions_directory, predictions)
-
 
 if __name__ == "__main__":
     main()
