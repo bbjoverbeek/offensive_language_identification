@@ -14,7 +14,7 @@ from shutil import rmtree
 
 # since the evaluate module caused problems, using old datasets load_metric
 from datasets import load_metric, DatasetDict
-from util import parse_config, load_data, Data, OffensiveWordReplaceOption
+from util import parse_config, load_data, OffensiveWordReplaceOption
 
 
 accuracy = load_metric('accuracy')
@@ -29,12 +29,12 @@ def create_default_config(create_file: bool = False) -> dict[str, str]:
         'evaluation_set_while_training': 'dev',  # dev, test
         'model_id': 'bert-base-cased',  # model-id from huggingface.co/models
         'seed': None,  # int or None
-        'learning_rate': 0.001,
+        'learning_rate': 0.00005,
         'batch_size': 16,
-        'epochs': 5,
-        'weight_decay': 0.01,
+        'epochs': 3,
+        'weight_decay': 0,
         'evaluation_strategy': 'epoch',  # epoch, steps
-        'evaluation_set': 'dev' # dev or test
+        'evaluation_set': 'dev',  # dev or test
     }
 
     if create_file:
@@ -68,7 +68,7 @@ def parse_args() -> argparse.Namespace:
         '-o',
         '--output_folder',
         default='./model/',
-        help='Where to output the model when fine-tuned (default ./model/)'
+        help='Where to output the model when fine-tuned (default ./model/)',
     )
 
     args = parser.parse_args()
