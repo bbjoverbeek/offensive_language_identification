@@ -1,0 +1,14 @@
+{
+    "data_dir": "./data",
+    "preprocessed": true,
+    "replace_option": "none",
+    "evaluation_set_while_training": "dev",
+    "model_id": "bert-base-cased",
+    "seed": null,
+    "learning_rate": 0.001,
+    "batch_size": 16,
+    "epochs": 5,
+    "weight_decay": 0.01,
+    "evaluation_strategy": "epoch",
+    "evaluation_set": "dev"
+}

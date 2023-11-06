@@ -111,11 +111,11 @@ def finetune_model(
     training_args = TrainingArguments(
         output_dir='./intermediate_models',
         seed=config['seed'] if config['seed'] else 42,
-        # learning_rate=config['learning_rate'],
+        learning_rate=config['learning_rate'],
         # per_device_train_batch_size=16,
         # per_device_eval_batch_size=16,
-        # num_train_epochs=config['epochs'],
-        # weight_decay=config['weight_decay'],
+        num_train_epochs=config['epochs'],
+        weight_decay=config['weight_decay'],
         no_cuda=False,
         evaluation_strategy="epoch",
         save_strategy="epoch",
@@ -123,7 +123,7 @@ def finetune_model(
     )
 
     trainer = Trainer(
-        model_init=lambda: create_model(config['model']),
+        model_init=lambda: create_model(config['model_id']),
         args=training_args,
         train_dataset=dataset['train'],
         eval_dataset=dataset['dev'],
