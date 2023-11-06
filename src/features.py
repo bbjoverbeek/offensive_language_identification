@@ -4,6 +4,10 @@
 Authors: Björn Overbeek & Oscar Zwagers
 Description: A program that will train a classifier with the given train set to
 predict if a piece of text has offensive language or not.
+Note: This program runs all the model options at once. This is done because getting the sentiment
+of the tweet and getting the pos-tags of the tweet through spaCy takes a lot of time. By running
+all the models at once, we only have to do this once. This is also why there is a long best_options
+function in the code.
 """
 
 import itertools
