@@ -3,6 +3,7 @@ import os
 from typing import NamedTuple
 from enum import Enum
 import json
+from datasets import Dataset, DatasetDict
 
 
 class DataType(Enum):
@@ -18,6 +19,7 @@ class OffensiveWordReplaceOption(Enum):
 
     @staticmethod
     def from_str(option):
+        """Creates an OffensiveWordReplaceOption from a string"""
         match option:
             case 'none':
                 return OffensiveWordReplaceOption.NONE
@@ -26,7 +28,7 @@ class OffensiveWordReplaceOption(Enum):
             case 'remove':
                 return OffensiveWordReplaceOption.REMOVE
             case _:
-                raise NotImplementedError('Use none, replace or remove')
+                raise NotImplementedError('Use none, replace, or remove')
 
 
 class DataItems(NamedTuple):
@@ -38,6 +40,41 @@ class Data(NamedTuple):
     training: DataItems
     development: DataItems
     test: DataItems
+
+    def to_dataset(self) -> DatasetDict:
+        """Converts the data to a Huggingface Dataset"""
+
+        dataset = DatasetDict(
+            {
+                'train': Dataset.from_dict(
+                    {
+                        'text': self.training.documents,
+                        'labels': [
+                            1 if label == 'OFF' else 0 for label in self.training.labels
+                        ],
+                    }
+                ),
+                'dev': Dataset.from_dict(
+                    {
+                        'text': self.development.documents,
+                        'labels': [
+                            1 if label == 'OFF' else 0
+                            for label in self.development.labels
+                        ],
+                    }
+                ),
+                'test': Dataset.from_dict(
+                    {
+                        'text': self.test.documents,
+                        'labels': [
+                            1 if label == 'OFF' else 0 for label in self.test.labels
+                        ],
+                    }
+                ),
+            }
+        )
+
+        return dataset
 
 
 def load_offensive_words(file_path: str) -> set[str]:

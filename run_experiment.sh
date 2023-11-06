@@ -112,5 +112,5 @@ else
         --evaluation-overview $RESULTS_FOLDER"$1".md
 fi
 
-# --- Deactivate virtual environment ---
+# --- Deactivate virtual environment---
 deactivate
