@@ -1,11 +1,14 @@
 #!/bin/bash
 # This program is a bash script that runs the experiments for the paper. 
 # It takes one command line argument to run: baseline, features, lstm, plm.
+# make sure that there is a python script wih the same name in the src folder, 
+# and a config file with the same name in the configs folder.
+
 # Variables below can be adjusted
 
 # --- set variables ---
 EXPERIMENTS_FOLDER="./experiments/"
-DATA_FOLDER="./data/"
+CONFIGS_FOLDER="./configs/"
 RESULTS_FOLDER="./results/"
 CODE_FOLDER="./src/"
 ENV_FOLDER="./env/"
@@ -47,18 +50,22 @@ case $1 in
 
   "baseline")
     cp $CODE_FOLDER"baseline.py" $EXPERIMENT_FOLDER"train.py"
+    cp $CONFIGS_FOLDER"baseline.json" $EXPERIMENT_FOLDER"config.json"
     ;;
 
   "features")
     cp $CODE_FOLDER"features.py" $EXPERIMENT_FOLDER"train.py"
+    cp $CONFIGS_FOLDER"features.json" $EXPERIMENT_FOLDER"config.json"
     ;;
 
   "lstm")
     cp $CODE_FOLDER"lstm.py" $EXPERIMENT_FOLDER"train.py"
+    cp $CONFIGS_FOLDER"lstm.json" $EXPERIMENT_FOLDER"config.json"
     ;;
 
   "plm")
     cp $CODE_FOLDER"plm.py" $EXPERIMENT_FOLDER"train.py"
+    cp $CONFIGS_FOLDER"plm.json" $EXPERIMENT_FOLDER"config.json"
     ;;
 
   *)
@@ -67,7 +74,9 @@ case $1 in
     ;;
 esac
 
-# --- Copy the evaluation and prediction scripts ---
+# --- Copy the util, evaluation and prediction scripts ---
+touch $EXPERIMENT_FOLDER"__init__.py"
+cp $CODE_FOLDER"util.py" $EXPERIMENT_FOLDER"util.py"
 cp $CODE_FOLDER"evaluate.py" $EXPERIMENT_FOLDER"evaluate.py"
 cp $CODE_FOLDER"predict.py" $EXPERIMENT_FOLDER"predict.py"
 
@@ -75,11 +84,9 @@ cp $CODE_FOLDER"predict.py" $EXPERIMENT_FOLDER"predict.py"
 source $ENV_FOLDER"bin/activate"
 
 # --- Train the model ---
-python3 $EXPERIMENT_FOLDER"train.py" \
-        --train-data $DATA_FOLDER"train.tsv" \
-        --model-outp $EXPERIMENT_FOLDER"model.bin" > $EXPERIMENT_FOLDER"training_log.txt"
+python3 $EXPERIMENT_FOLDER"train.py" -c $EXPERIMENT_FOLDER"config.json" > $EXPERIMENT_FOLDER"training_log.txt"
 
-# predict and evaluate on dev or test set based on TEST_SET variable
+# --- Predict and evaluate on dev or test set based on TEST_SET variable ---
 if [ $TEST_SET = false ]; then
     python3 $EXPERIMENT_FOLDER"predict.py" \
             --model $EXPERIMENT_FOLDER"model.bin" \
@@ -105,5 +112,5 @@ else
         --evaluation-overview $RESULTS_FOLDER"$1".md
 fi
 
-# --- Deactivate virtual environment ---
+# --- Deactivate virtual environment---
 deactivate
